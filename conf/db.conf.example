@@ -1,4 +1,4 @@
-[Mongo]
-server = Server_IP
+[db]
+server = SERVER
 port = 27017
 db = Quark

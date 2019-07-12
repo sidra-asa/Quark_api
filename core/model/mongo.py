@@ -4,11 +4,10 @@
 import os
 import sys
 import logging
+from flask import current_app
 from datetime import time, datetime, timedelta
 from pymongo.errors import DuplicateKeyError
 from pymongo import MongoClient, HASHED, IndexModel, ASCENDING, DESCENDING
-
-from configparser import ConfigParser
 
 
 class DB(object):
@@ -16,14 +15,10 @@ class DB(object):
     expected_fields = {'id'}
 
     def __init__(self):
-        config = ConfigParser()
-        try:
-            config.read(os.getcwd()+'/conf/db.conf')
-        except FileExistsError:
-            raise("db.conf not exists!")
-        db_server = config.get('Mongo', 'server')
-        db_port = config.get('Mongo', 'port')
-        db_name = config.get('Mongo', 'db')
+        config = current_app.global_config
+        db_server = config.get('db').get('server')
+        db_port = config.get('db').get('port')
+        db_name = config.get('db').get('db')
         try:
             conn = MongoClient(host=db_server, port=int(db_port))
         except:

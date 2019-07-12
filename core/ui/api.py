@@ -7,10 +7,8 @@ import logging
 from functools import wraps
 from flask import Blueprint, request, jsonify, abort, g, current_app
 
-from tasks.tasks import get_detail
 from core.model.mongo import apk
 from utils.Googleplay_api.googleplay import GooglePlayAPI, LoginError, SecurityCheckError
-from conf.gplay_api_conf import LOCALE, TIMEZONE, GOOGLE_PASSWORD, GOOGLE_LOGIN
 
 api = Blueprint('api', __name__)
 
@@ -30,9 +28,15 @@ def require_apikey(func):
 
 def initialize_login():
     # first login need to use account/password
-    gplay_api = GooglePlayAPI(LOCALE, TIMEZONE)
+    config = current_app.global_config
+    timezone = config.get('gplay_api').get('timezone')
+    locale = config.get('gplay_api').get('locale')
+    account = config.get('gplay_api').get('google_login')
+    password = config.get('gplay_api').get('google_password')
+
+    gplay_api = GooglePlayAPI(locale, timezone)
     try:
-        gplay_api.login(GOOGLE_LOGIN, GOOGLE_PASSWORD)
+        gplay_api.login(account, password)
     except LoginError:
         return initialize_login()
 
@@ -54,6 +58,8 @@ def getDetailsByPackName(gplay_api, packagename):
 @require_apikey
 def android_info(*args, **kwargs):
     apk_name = request.form.get('apk_name')
+    version_code = request.form.get('version_code')
+
     db_result = apk().get({'pgname': apk_name})
     if db_result.count() == 0:
         gplay_api = initialize_login()

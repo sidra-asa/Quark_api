@@ -1,0 +1,5 @@
+[gplay_api]
+locale = LOCALE
+timezone = TIMEZONE
+google_password = PASSWD
+google_login = ACCOUNT
