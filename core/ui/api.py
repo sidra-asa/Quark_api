@@ -12,7 +12,7 @@ from tasks.tasks import download_apk
 from core.model.mongo import APK
 from utils.gplay import Gplay_API
 from utils.utils import locale_timestring
-# from utils.Googleplay_api.googleplay import GooglePlayAPI, LoginError, SecurityCheckError
+
 
 api = Blueprint('api', __name__)
 
