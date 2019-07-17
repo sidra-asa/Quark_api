@@ -4,11 +4,15 @@
 import sys
 import logging
 
+from datetime import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify, abort, g, current_app
 
-from core.model.mongo import apk
-from utils.Googleplay_api.googleplay import GooglePlayAPI, LoginError, SecurityCheckError
+from tasks.tasks import download_apk
+from core.model.mongo import APK
+from utils.gplay import Gplay_API
+from utils.utils import locale_timestring
+# from utils.Googleplay_api.googleplay import GooglePlayAPI, LoginError, SecurityCheckError
 
 api = Blueprint('api', __name__)
 
@@ -26,43 +30,44 @@ def require_apikey(func):
     return decorated_func
 
 
-def initialize_login():
-    # first login need to use account/password
-    config = current_app.global_config
-    timezone = config.get('gplay_api').get('timezone')
-    locale = config.get('gplay_api').get('locale')
-    account = config.get('gplay_api').get('google_login')
-    password = config.get('gplay_api').get('google_password')
+def get_db_config(func):
+    @wraps(func)
+    def decorated_func(*args, **kwargs):
+        db_config = current_app.global_config.get('db')
+        kwargs['db_config'] = db_config
+        return func(*args, **kwargs)
 
-    gplay_api = GooglePlayAPI(locale, timezone)
-    try:
-        gplay_api.login(account, password)
-    except LoginError:
-        return initialize_login()
-
-    # you can get gsfid and subtoken after login
-    gsfId = gplay_api.gsfId
-    authSubToken = gplay_api.authSubToken
-
-    # use id and authSubToken to login
-    gplay_api.login(None, None, gsfId, authSubToken)
-    return gplay_api
-
-
-def getDetailsByPackName(gplay_api, packagename):
-    details = gplay_api.details(packagename)
-    return details
+    return decorated_func
 
 
 @api.route('/', methods=['POST'])
 @require_apikey
+@get_db_config
 def android_info(*args, **kwargs):
+    db_config = kwargs.get('db_config')
     apk_name = request.form.get('apk_name')
     version_code = request.form.get('version_code')
 
-    db_result = apk().get({'pgname': apk_name})
+    db_result = APK(db_config).get({'pgname': apk_name})
     if db_result.count() == 0:
-        gplay_api = initialize_login()
-        permissions = getDetailsByPackName(gplay_api, apk_name).get('permission')
+        config = current_app.global_config
+        timezone = config.get('gplay_api').get('timezone')
+        locale = config.get('gplay_api').get('locale')
+        account = config.get('gplay_api').get('google_login')
+        password = config.get('gplay_api').get('google_password')
+        gplay_api = Gplay_API(locale, timezone, account, password)
+        info = gplay_api.getDetailsByPackName(apk_name)
+        permissions = info.get('permission')
 
         return jsonify(permissions)
+
+
+@api.route('/dw', methods=['POST'])
+@require_apikey
+def download_android(*args, **kwargs):
+    apk_name = request.form.get('apk_name')
+    version_code = request.form.get('version_code')
+    print(apk_name, version_code)
+    job_id = download_apk.apply_async(args=[apk_name, version_code])
+
+    return jsonify(str(job_id))

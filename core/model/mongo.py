@@ -3,8 +3,8 @@
 
 import os
 import sys
+import gridfs
 import logging
-from flask import current_app
 from datetime import time, datetime, timedelta
 from pymongo.errors import DuplicateKeyError
 from pymongo import MongoClient, HASHED, IndexModel, ASCENDING, DESCENDING
@@ -14,11 +14,16 @@ class DB(object):
 
     expected_fields = {'id'}
 
-    def __init__(self):
-        config = current_app.global_config
-        db_server = config.get('db').get('server')
-        db_port = config.get('db').get('port')
-        db_name = config.get('db').get('db')
+    def __init__(self, db_config):
+        """
+        Args:
+            db_config (dict): database config
+        """
+        config = db_config
+        db_server = config.get('server')
+        db_port = config.get('port')
+        db_name = config.get('db')
+
         try:
             conn = MongoClient(host=db_server, port=int(db_port))
         except:
@@ -28,6 +33,7 @@ class DB(object):
             logging.debug("Using DB server: {0}, DB: {1}".format(db_server,
                                                                  db_name))
             self.db = conn[db_name]
+            self.fs = gridfs.GridFS(self.db)
 
         self.ensure_index()
 
@@ -35,7 +41,7 @@ class DB(object):
     def _clean_query(cls, origin_queries):
         """Filter unexpect fields from queries."""
         queries = origin_queries.copy()
-        for key in queries.keys():
+        for key in origin_queries.keys():
             if key not in cls.expected_fields:
                 logging.debug("Drop query item: {0}".format(key))
                 del queries[key]
@@ -122,21 +128,20 @@ class DB(object):
         self.collection.remove(queries)
 
 
-class apk(DB):
+class APK(DB):
     expected_fields = (
         '_id',
         'source',
         'submit_date',  # date of APK submit to DB
-        'name',
-        'version',
+        'version_code',
+        'version_string',
         'size',
-        'requirements',
+        'permissions',
         'pgname',
-        'publish_date',  # date of APK publish
+        'upload_date',  # date of APK uploaded
+        'apkfile',
         'apkdata',
         'title',
-        'sub_title',
-        'rank',
         'sha1',
         'crc32',
         'ssdeep',
@@ -144,15 +149,60 @@ class apk(DB):
         'sha512',
         'md5',
         'vt_scan',
-        'av_result',
-        'normal_permission',
-        'danger_permission'
     )
 
     def ensure_index(self):
-        # DNSrecord collection
-        # There's Date, Client, DN, NS, and Count columns
         index1 = IndexModel([("vt_scan", ASCENDING)], background=True)
         index2 = IndexModel([("av_result", ASCENDING)], background=True)
 
         self.collection.create_indexes([index1, index2])
+
+    def write(self, origin_queries):
+        """Insert/Update row in apk collection
+
+        Args:
+            queries: query dict, or pipeline.
+        """
+        queries = self.__class__._clean_query(origin_queries)
+        queries['submit_date'] = datetime.strptime(queries['submit_date'], "%Y-%m-%d")
+        queries['upload_date'] = datetime.strptime(queries['upload_date'], "%Y-%m-%d")
+
+        logging.debug("queries in {}: {}".format(__name__, queries))
+
+        # Insert APK file
+        if self.fs.exists({'filename': queries['sha512']}):
+            logging.warn(f"{queries['pgname']} File already exists!")
+            file_id = self.fs.find_one({'filename': queries['sha512']})._id
+        else:
+            file_id = self.fs.put(queries['apkdata'], filename=queries['sha512'])
+
+        queries['apkfile'] = file_id
+
+        # insert data to apk collection
+        filter_obj = {
+            'pgname': queries['pgname'],
+            'version_code': queries['version_code'],
+            'version_string': queries['version_string'],
+            'title': queries['title'],
+            'source': queries['source']
+        }
+
+        update_dict = {'$set': {
+            'submit_date': queries['submit_date'],
+            'size': queries['size'],
+            'permissions': queries['permissions'],
+            'upload_date': queries['upload_date'],
+            'apkfile': queries['apkfile'],
+            'sha1': queries['sha1'],
+            'crc32': queries['crc32'],
+            'ssdeep': queries['ssdeep'],
+            'sha256': queries['sha256'],
+            'sha512': queries['sha512'],
+            'md5': queries['md5'],
+            'vt_scan': queries.get('vt_scan'),
+        }}
+        # UpdateResult object.
+        result = self.collection.update_one(filter_obj,
+                                            update_dict,
+                                            upsert=True)
+        return result
