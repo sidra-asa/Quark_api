@@ -48,8 +48,14 @@ def android_info(*args, **kwargs):
     apk_name = request.form.get('apk_name')
     version_code = request.form.get('version_code')
 
-    db_result = APK(db_config).get({'pgname': apk_name})
+    db_filter = {'pgname': apk_name}
+    if version_code:
+        db_filter.update({'version_code': int(version_code)})
+
+    db_result = APK(db_config).get(db_filter)
+    result = dict()
     if db_result.count() == 0:
+        logging.warn("Sending request to Google Play .")
         config = current_app.global_config
         timezone = config.get('gplay_api').get('timezone')
         locale = config.get('gplay_api').get('locale')
@@ -58,8 +64,17 @@ def android_info(*args, **kwargs):
         gplay_api = Gplay_API(locale, timezone, account, password)
         info = gplay_api.getDetailsByPackName(apk_name)
         permissions = info.get('permission')
+        info_versioncode = str(info.get('versionCode'))
+        download_apk.apply_async(args=[apk_name, info_versioncode])
+        
+        result.update({"permissions": permissions})
 
-        return jsonify(permissions)
+    else:
+        logging.warn("Get result from DB")
+        result.update({"permissions": db_result[0].get("permissions")})
+        result.update({"av_result": db_result[0].get("av_result")['scans']})
+    
+    return jsonify(result)
 
 
 @api.route('/dw', methods=['POST'])
@@ -67,7 +82,6 @@ def android_info(*args, **kwargs):
 def download_android(*args, **kwargs):
     apk_name = request.form.get('apk_name')
     version_code = request.form.get('version_code')
-    print(apk_name, version_code)
     job_id = download_apk.apply_async(args=[apk_name, version_code])
 
     return jsonify(str(job_id))

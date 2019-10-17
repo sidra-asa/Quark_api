@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import re
 import os
 import sys
 import gridfs
@@ -149,13 +150,15 @@ class APK(DB):
         'sha512',
         'md5',
         'vt_scan',
+        'av_result'
     )
 
     def ensure_index(self):
         index1 = IndexModel([("vt_scan", ASCENDING)], background=True)
-        index2 = IndexModel([("av_result", ASCENDING)], background=True)
+        index2 = IndexModel([("av_result.positives", ASCENDING)], background=True)
 
         self.collection.create_indexes([index1, index2])
+        # self.collection.create_indexes([index1])
 
     def write(self, origin_queries):
         """Insert/Update row in apk collection
@@ -200,9 +203,35 @@ class APK(DB):
             'sha512': queries['sha512'],
             'md5': queries['md5'],
             'vt_scan': queries.get('vt_scan'),
+            'av_result': queries.get('av_result')
         }}
         # UpdateResult object.
         result = self.collection.update_one(filter_obj,
                                             update_dict,
                                             upsert=True)
         return result
+
+    def get_apk_file(self, file_hash):
+        """
+        """
+        pattern_list = [
+            ("md5", re.compile(r"^[a-fA-F\d]{32}$")),
+            ("sha1", re.compile(r"^[a-fA-F\d]{40}$")),
+            ("sha256", re.compile(r"^[a-fA-F\d]{64}$")),
+            ("sha512", re.compile(r"^[a-fA-F\d]{128}$"))
+        ]
+        filter_dict = {"limit": 1}
+        for field_name, pattern in pattern_list:
+            if pattern.match(file_hash):
+                filter_dict[field_name] = file_hash
+                break
+
+        if len(filter_dict) == 1:
+            raise("Malformed File hash : {}".format(file_hash))
+        print(filter_dict)
+        apk_info = self.get(filter_dict)
+        print(apk_info)
+        doc_id = apk_info["apkfile"]
+        file_name = "{}.apk".format(apk_info["pgname"])
+        apk_file = self.fs.get(doc_id).read()
+        return (file_name, apk_file)

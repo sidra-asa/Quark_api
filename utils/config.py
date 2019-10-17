@@ -15,7 +15,7 @@ class Config(object):
         """
         @param path: file path of config file.
         """
-        config_list = ['db', 'celery', 'gplay_api']
+        config_list = ['db', 'celery', 'gplay_api', 'vt']
         config = ConfigParser()
 
         for mod in config_list:

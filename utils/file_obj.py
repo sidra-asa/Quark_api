@@ -41,7 +41,7 @@ class File:
 
     def _get_ssdeep(self):
         try:
-            return pydeep.hash_buf(self._file_data)
+            return pydeep.hash_buf(self._file_data).decode()
         except Exception as e:
             logging.warn(f"Error: {e}")
             return None
