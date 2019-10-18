@@ -40,7 +40,8 @@ class TestFile(unittest.TestCase):
         assert expection == self.test_file_hash.get('sha512')
 
     def test_get_ssdeep(self):
-        expection = b"3:ag:ag"
+        expection = "3:ag:ag"
+        print(self.test_file_hash.get('ssdeep'))
         assert expection == self.test_file_hash.get('ssdeep')
 
     def test_get_crc32(self):
