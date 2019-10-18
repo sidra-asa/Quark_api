@@ -13,6 +13,7 @@ before_install:
   - echo -e "[db]\nserver = 127.0.0.1\nport = 27017\ndb = Quark"| cat - > conf/db.conf
   - echo -e "[celery]\nsite = redis://@127.0.0.1:6379"| cat - > conf/celery.conf
   - echo -e "[gplay_api]\nlocale = en_US\ntimezone = UTC\ngoogle_password = PASS\ngoogle_login = USER"| cat - > conf/gplay_api.conf
+  - echo -e "[vt]\napi_key = API_KEY"| cat - > conf/vt.conf
 
 # Install the codecov pip dependency
 install:
